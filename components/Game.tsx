@@ -18,7 +18,7 @@ function formatTime(ms: number) {
 export function Game() {
   const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime } = useGameStore();
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
-  const [mode, setMode] = useState<InteractionMode>('place');
+  const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -64,8 +64,6 @@ export function Game() {
     if (!puzzle) return new Set<string>();
     const cells = new Set<string>();
     puzzle.zonesInfo.forEach(zone => {
-      let targetR = -1;
-      let targetC = -1;
       const candidates = [];
       for (let r = 0; r < puzzle.N; r++) {
          for (let c = 0; c < puzzle.N; c++) {
@@ -75,15 +73,25 @@ export function Game() {
          }
       }
       const empty = candidates.filter(c => !c.hasProp);
-      if (empty.length > 0) {
-         targetR = empty[0].r;
-         targetC = empty[0].c;
-      } else if (candidates.length > 0) {
-         targetR = candidates[0].r;
-         targetC = candidates[0].c;
+      const lookup = empty.length > 0 ? empty : candidates;
+      
+      let bestCell = lookup[0];
+      let maxRun = 0;
+      
+      for (const cell of lookup) {
+         let run = 1;
+         for (let c = cell.c + 1; c < puzzle.N; c++) {
+            if (puzzle.cells[cell.r][c].zoneId === zone.id) run++;
+            else break;
+         }
+         if (run > maxRun) {
+            maxRun = run;
+            bestCell = cell;
+         }
       }
-      if (targetR !== -1) {
-         cells.add(`${targetR}_${targetC}`);
+      
+      if (bestCell) {
+         cells.add(`${bestCell.r}_${bestCell.c}`);
       }
     });
     return cells;
@@ -196,10 +204,9 @@ export function Game() {
                return (
                  <button
                    key={char.id}
-                   disabled={mode === 'cross'}
+                   disabled={mode === 'cross' || (mode === 'draft' && isPlaced)}
                    onClick={() => {
                       if(currentView === 'won' || mode === 'cross') return;
-                      // In draft mode we don't care if it's placed somewhere, we can still draft it
                       if (mode === 'place' && isPlaced) {
                          removeCharacter(char.id);
                          setSelectedCharId(char.id);
@@ -208,14 +215,15 @@ export function Game() {
                       }
                    }}
                    className={`flex flex-col items-center justify-center w-[50px] md:w-[60px] transition-all
-                     ${(isPlaced && mode === 'place') ? 'opacity-30 grayscale cursor-default scale-90' : 'cursor-pointer'}
+                     ${isPlaced ? 'opacity-30 grayscale scale-90' : 'cursor-pointer'}
+                     ${isPlaced && mode === 'draft' ? 'cursor-not-allowed' : ''}
                      ${isSelected ? '-translate-y-2 scale-110 drop-shadow-xl' : ''}
                      ${mode === 'cross' ? 'opacity-50 cursor-not-allowed' : ''}
                    `}
                  >
                    <div className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center text-xl md:text-2xl bg-white rounded-full border-2 shadow-sm
                      ${isSelected ? (mode === 'draft' ? 'border-blue-400 ring-4 ring-blue-100' : 'border-amber-400 ring-4 ring-amber-100') : 'border-stone-200'}
-                     ${isPlaced && mode === 'place' ? 'shadow-none' : ''}
+                     ${isPlaced ? 'shadow-none' : ''}
                    `}>
                      {char.spriteRow !== undefined && char.spriteCol !== undefined ? (
                         <CharacterSprite row={char.spriteRow} col={char.spriteCol} size={40} bgColor={char.bgColor} />
@@ -270,7 +278,7 @@ export function Game() {
                      key={c}
                      onClick={() => handleCellClick(r, c)}
                      disabled={isBlocker || currentView === 'won'}
-                     className={`relative flex-1 ${cornerClasses} flex flex-col items-center justify-center transition-all overflow-hidden
+                     className={`relative flex-1 ${cornerClasses} flex flex-col items-center justify-center transition-all ${charPlaced ? 'z-20' : 'z-0'}
                         ${zone.bg}
                         ${isBlocker ? 'cursor-not-allowed' : 'cursor-pointer hover:brightness-95 active:scale-95'}
                         ${hasConflict ? 'ring-4 ring-rose-500 ring-inset z-20' : ''}
@@ -278,7 +286,7 @@ export function Game() {
                    >
                      {/* Floor Sprite Background */}
                      {zone.spriteRow !== undefined && zone.spriteCol !== undefined && (
-                       <div className="absolute inset-0 z-0 pointer-events-none">
+                       <div className={`absolute inset-0 z-0 pointer-events-none overflow-hidden ${cornerClasses}`}>
                          <FloorSprite row={zone.spriteRow} col={zone.spriteCol} ambientName={puzzle.ambientName} />
                        </div>
                      )}
@@ -294,25 +302,6 @@ export function Game() {
                         </div>
                      )}
                      
-                     {/* Placed Character */}
-                     <AnimatePresence>
-                        {charPlaced && (
-                           <motion.div
-                             initial={{ scale: 0, opacity: 0, rotate: -20 }}
-                             animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                             exit={{ scale: 0, opacity: 0 }}
-                             className="absolute inset-0 z-10 flex flex-col items-center justify-center drop-shadow-md pointer-events-none"
-                           >
-                             {charPlaced.spriteRow !== undefined && charPlaced.spriteCol !== undefined ? (
-                               <CharacterSprite row={charPlaced.spriteRow} col={charPlaced.spriteCol} size="55%" bgColor={charPlaced.bgColor} />
-                             ) : (
-                               <span className="text-2xl md:text-3xl leading-none">{charPlaced.emoji}</span>
-                             )}
-                             <span className="text-[8px] md:text-[10px] font-extrabold text-stone-800 bg-white/90 shadow-sm px-1 py-0.5 rounded-md absolute -bottom-1 md:-bottom-2">{charPlaced.name}</span>
-                           </motion.div>
-                        )}
-                     </AnimatePresence>
-
                      {/* Show valid prop underneath if character is on it but small */}
                      {cell.prop && cell.prop.type === 'valid' && charPlaced && (
                         <div className={`absolute inset-0 flex items-center justify-center z-0 transition-all ${cell.prop.spriteRow !== undefined ? 'opacity-70 scale-100' : 'opacity-70 scale-100'}`}>
@@ -377,14 +366,49 @@ export function Game() {
                            {isBottomDiff && <div className={`absolute -left-[1.5px] -bottom-[3.5px] h-[5px] bg-stone-900 z-40 ${c === puzzle.N - 1 ? 'right-0' : '-right-[3.5px]'}`} />}
 
                            {hasLabel && (
-                              <div className={`absolute -top-1 -left-1 md:-top-1.5 md:-left-1.5 pointer-events-none z-50 transition-all ${placement ? 'opacity-40' : 'opacity-100'}`}>
-                                 <div className="bg-white/90 px-1.5 py-0.5 border-[1.5px] border-stone-800 rounded shadow-md backdrop-blur-sm relative">
-                                    <span className="text-[8.5px] md:text-[9.5px] font-black text-stone-900 uppercase tracking-widest leading-none block whitespace-nowrap">
+                              <div className={`absolute top-0 left-0 pointer-events-none z-50 transition-all ${placement ? 'opacity-40' : 'opacity-100'}`}>
+                                 <div className="bg-white/90 px-1 py-0.5 border-b border-r border-stone-800 rounded-br-md shadow-sm backdrop-blur-sm relative flex justify-center">
+                                    <span style={{ fontSize: '8px' }} className="md:text-[9px] font-black text-stone-900 uppercase tracking-widest leading-none text-center whitespace-nowrap">
                                        {puzzle.zonesInfo[cell.zoneId].name}
                                     </span>
                                  </div>
                               </div>
                            )}
+                        </div>
+                     )
+                  })}
+                </div>
+             ))}
+          </div>
+
+          {/* Characters Overlay */}
+          <div className="absolute inset-0 pointer-events-none z-[60] flex flex-col">
+             {puzzle.cells.map((row, r) => (
+                <div key={`char-row-${r}`} className="flex flex-1 w-full gap-[2px] mb-[2px] last:mb-0">
+                  {row.map((cell, c) => {
+                     const placement = placements.find(p => p.r === r && p.c === c);
+                     const charPlaced = placement ? puzzle.characters.find(cChar => cChar.id === placement.charId) : undefined;
+                     return (
+                        <div key={`char-cell-${c}`} className="flex-1 relative flex items-center justify-center">
+                           <AnimatePresence>
+                              {charPlaced && (
+                                 <motion.div
+                                   initial={{ scale: 0, opacity: 0, rotate: -20 }}
+                                   animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                   exit={{ scale: 0, opacity: 0 }}
+                                   className="absolute inset-0 z-10 flex flex-col items-center justify-center drop-shadow-md pointer-events-none"
+                                 >
+                                   {charPlaced.spriteRow !== undefined && charPlaced.spriteCol !== undefined ? (
+                                     <CharacterSprite row={charPlaced.spriteRow} col={charPlaced.spriteCol} size="55%" bgColor={charPlaced.bgColor} />
+                                   ) : (
+                                     <span className="text-2xl md:text-3xl leading-none">{charPlaced.emoji}</span>
+                                   )}
+                                   <span className="text-[8.5px] md:text-[10px] whitespace-nowrap font-extrabold text-stone-900 bg-white/95 shadow-sm px-1.5 py-0.5 rounded-md absolute -bottom-1 md:-bottom-2 z-20 border border-stone-200">
+                                      {charPlaced.name}
+                                   </span>
+                                 </motion.div>
+                              )}
+                           </AnimatePresence>
                         </div>
                      )
                   })}

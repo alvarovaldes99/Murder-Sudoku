@@ -125,10 +125,41 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   removeCharacter: (charId) => {
-    set((prev) => ({
-      placements: prev.placements.filter(p => p.charId !== charId),
-      history: [...prev.history, { placements: prev.placements, drafts: prev.drafts, crosses: prev.crosses }]
-    }));
+    set((prev) => {
+      const placement = prev.placements.find(p => p.charId === charId);
+      if (!placement) return {};
+
+      const newPlacements = prev.placements.filter(p => p.charId !== charId);
+      const newCrosses = { ...prev.crosses };
+
+      // Calculate all cells that are crossed by OTHER placements
+      const crossedByOthers = new Set();
+      newPlacements.forEach(p => {
+        for (let i = 0; i < get().puzzle!.N; i++) {
+           if (i !== p.c) crossedByOthers.add(`${p.r}_${i}`);
+           if (i !== p.r) crossedByOthers.add(`${i}_${p.c}`);
+        }
+      });
+
+      // Remove crosses from the removed character's row and column
+      // only if they are not crossed by others
+      for (let i = 0; i < get().puzzle!.N; i++) {
+        const rowKey = `${placement.r}_${i}`;
+        const colKey = `${i}_${placement.c}`;
+        if (i !== placement.c && !crossedByOthers.has(rowKey)) {
+           delete newCrosses[rowKey];
+        }
+        if (i !== placement.r && !crossedByOthers.has(colKey)) {
+           delete newCrosses[colKey];
+        }
+      }
+
+      return {
+        placements: newPlacements,
+        crosses: newCrosses,
+        history: [...prev.history, { placements: prev.placements, drafts: prev.drafts, crosses: prev.crosses }]
+      };
+    });
   },
 
   toggleDraft: (charId, r, c) => {
