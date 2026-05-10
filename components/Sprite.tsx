@@ -204,9 +204,11 @@ export function GraphicSprite({ sheetUrl, cols, rows, row, col, removeBackground
   );
 }
 
+const basePath = process.env.NODE_ENV === 'production' ? '/Murder-Sudoku' : '';
+
 // Wrapper for existing Character sprite code
 export function CharacterSprite({ row, col, className = '', size = 48, bgColor }: Omit<SpriteProps, 'sheetUrl'|'cols'|'rows'>) {
-  return <GraphicSprite sheetUrl="/characters.jpg" cols={5} rows={2} row={row} col={col} className={className} size={size} bgColor={bgColor} />;
+  return <GraphicSprite sheetUrl={`${basePath}/characters.jpg`} cols={5} rows={2} row={row} col={col} className={className} size={size} bgColor={bgColor} />;
 }
 
 interface EnvironmentSpriteProps extends Omit<SpriteProps, 'sheetUrl'|'cols'|'rows'> {
@@ -216,12 +218,12 @@ interface EnvironmentSpriteProps extends Omit<SpriteProps, 'sheetUrl'|'cols'|'ro
 export function PropSprite({ row, col, className = '', size = 48, ambientName = 'Parque' }: EnvironmentSpriteProps) {
   const normalizedAmbientName = ambientName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const cols = normalizedAmbientName === 'iglesia' || normalizedAmbientName === 'tienda' ? 4 : 5;
-  return <GraphicSprite sheetUrl={`/props-${normalizedAmbientName}.jpg`} cols={cols} rows={2} row={row} col={col} className={className} size={size} removeBackground={true} />;
+  return <GraphicSprite sheetUrl={`${basePath}/props-${normalizedAmbientName}.jpg`} cols={cols} rows={2} row={row} col={col} className={className} size={size} removeBackground={true} />;
 }
 
 export function FloorSprite({ row, col, className = '', size = 48, ambientName = 'Parque' }: EnvironmentSpriteProps) {
   const normalizedAmbientName = ambientName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return <GraphicSprite sheetUrl={`/floors-${normalizedAmbientName}.jpg`} cols={5} rows={2} row={row} col={col} className={`w-full h-full ${className}`} size={size} removeBackground={true} />;
+  return <GraphicSprite sheetUrl={`${basePath}/floors-${normalizedAmbientName}.jpg`} cols={5} rows={2} row={row} col={col} className={`w-full h-full ${className}`} size={size} removeBackground={true} />;
 }
 
 
