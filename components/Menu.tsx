@@ -6,7 +6,7 @@ export function Menu() {
   const startLevel = useGameStore(state => state.startLevel);
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 min-h-[100dvh] w-full max-w-md mx-auto">
+    <div className="flex flex-col items-center py-12 px-6 h-full overflow-y-auto w-full max-w-md mx-auto">
       <motion.div 
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}

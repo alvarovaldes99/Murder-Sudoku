@@ -8,7 +8,7 @@ export default function Home() {
   const currentView = useGameStore(state => state.currentView);
 
   return (
-    <main className="min-h-[100dvh] bg-stone-100 flex flex-col items-center js-main-container">
+    <main className="h-[100dvh] w-full overflow-hidden bg-stone-100 flex justify-center js-main-container">
       {currentView === 'menu' && <Menu />}
       {(currentView === 'playing' || currentView === 'won') && <Game />}
     </main>

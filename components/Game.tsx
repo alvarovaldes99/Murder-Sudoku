@@ -129,7 +129,7 @@ export function Game() {
   };
 
   return (
-    <div className="flex flex-col w-full max-w-lg mx-auto bg-stone-50 min-h-[100dvh] relative">
+    <div className="flex flex-col w-full h-full max-w-lg mx-auto bg-stone-50 relative">
       
       {/* Sticky Top Section */}
       <div className="sticky top-0 z-[100] bg-stone-50/95 backdrop-blur-md pb-3 flex flex-col gap-2">
