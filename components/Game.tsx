@@ -92,32 +92,50 @@ export function Game() {
   useEffect(() => {
     let active = true;
     if (currentView === 'won' && currentDuelId) {
-      const fetchDuel = async () => {
+      const fetchDuelRealtime = async () => {
         setLoadingDuel(true);
         try {
-          const { getDocs, getDoc, doc } = await import('firebase/firestore');
-          const resSnap = await getDocs(collection(db, 'duels', currentDuelId, 'results'));
-          const results = resSnap.docs.map(d => d.data() as any);
+          const { onSnapshot, getDoc, doc, collection } = await import('firebase/firestore');
+          
+          let creatorData: any = null;
           const duelDoc = await getDoc(doc(db, 'duels', currentDuelId));
           if (duelDoc.exists()) {
              const data = duelDoc.data();
-             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
+             creatorData = { userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs };
           }
-          if (active) {
-            // Remove duplicates if creator challenged themselves (should not happen normally)
-            const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
-            uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
-            setDuelResults(uniqueResults);
-          }
+
+          const unsub = onSnapshot(collection(db, 'duels', currentDuelId, 'results'), (resSnap) => {
+             const results = resSnap.docs.map(d => d.data() as any);
+             if (creatorData) results.push(creatorData);
+             
+             if (active) {
+                const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+                uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+                setDuelResults(uniqueResults);
+                setLoadingDuel(false);
+             }
+          }, (err) => {
+             console.error('Error fetching duel results:', err);
+             if (active) setLoadingDuel(false);
+          });
+          
+          return unsub;
         } catch (e) {
           console.error(e);
-        } finally {
           if (active) setLoadingDuel(false);
         }
       };
-      fetchDuel();
+      
+      let unsubscribe: (() => void) | undefined;
+      fetchDuelRealtime().then(unsub => {
+        if (unsub) unsubscribe = unsub;
+      });
+
+      return () => { 
+        active = false; 
+        if (unsubscribe) unsubscribe();
+      };
     }
-    return () => { active = false; };
   }, [currentView, currentDuelId, user]); // added user to dependency to refetch after login
 
   useEffect(() => {
@@ -177,17 +195,11 @@ export function Game() {
                    timeMs: finalTimeMs,
                    playedAt: serverTimestamp()
                  });
-                 // Add to local state so it appears immediately
-                 setDuelResults(prev => {
-                   const newRes = { userId: user.uid, userName: challengerName, timeMs: finalTimeMs };
-                   const unique = Array.from(new Map([...prev, newRes].map(item => [item.userId, item])).values());
-                   unique.sort((a: any, b: any) => a.timeMs - b.timeMs);
-                   return unique;
-                 });
                }
                setHasSavedState(true);
-             } catch (e) {
+             } catch (e: any) {
                console.error('Failed to save record:', e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
+               setLoginError(`Error al guardar: ${e.message}`);
                hasSavedRef.current = false;
              }
            };
