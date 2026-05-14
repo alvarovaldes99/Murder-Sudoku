@@ -87,7 +87,11 @@ export const loginWithGoogle = async () => {
       }
     }
     return user;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+      // Ignorar si el usuario cierra el popup
+      return null;
+    }
     console.error('Error logging in with Google', error);
     throw error;
   }
