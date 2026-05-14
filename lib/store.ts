@@ -271,9 +271,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     
     if (matchesExact) {
-       if (s.currentView !== 'won') {
-         set({ currentView: 'won', endTime: Date.now() });
-       }
+       set({ currentView: 'won', endTime: Date.now() });
        return true;
     } else if (ruleMatches && !matchesExact) {
        // Since the puzzle guarantees a unique solution from the clues mapped, 

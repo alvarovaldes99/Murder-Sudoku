@@ -46,10 +46,7 @@ export function Game() {
 
   const getShareUrl = (duelId?: string) => {
     if (!gameSeed) return '';
-    const isAiStudio = window.location.hostname.includes('run.app');
-    const baseUrl = isAiStudio 
-      ? 'https://albaricoquevaldes.github.io/Murdoku/' 
-      : window.location.origin + window.location.pathname;
+    const baseUrl = window.location.origin + window.location.pathname;
 
     const url = new URL(baseUrl);
     url.searchParams.set('seed', gameSeed.toString());
@@ -92,50 +89,34 @@ export function Game() {
   useEffect(() => {
     let active = true;
     if (currentView === 'won' && currentDuelId) {
-      const fetchDuelRealtime = async () => {
+      const fetchDuel = async () => {
         setLoadingDuel(true);
         try {
-          const { onSnapshot, getDoc, doc, collection } = await import('firebase/firestore');
-          
-          let creatorData: any = null;
+          const { getDocs, getDoc, doc } = await import('firebase/firestore');
+          const resSnap = await getDocs(collection(db, 'duels', currentDuelId, 'results'));
+          const results = resSnap.docs.map(d => d.data() as any);
           const duelDoc = await getDoc(doc(db, 'duels', currentDuelId));
           if (duelDoc.exists()) {
              const data = duelDoc.data();
-             creatorData = { userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs };
+             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
           }
-
-          const unsub = onSnapshot(collection(db, 'duels', currentDuelId, 'results'), (resSnap) => {
-             const results = resSnap.docs.map(d => d.data() as any);
-             if (creatorData) results.push(creatorData);
-             
-             if (active) {
-                const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
-                uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
-                setDuelResults(uniqueResults);
-                setLoadingDuel(false);
-             }
-          }, (err) => {
-             console.error('Error fetching duel results:', err);
-             if (active) setLoadingDuel(false);
-          });
-          
-          return unsub;
+          if (active) {
+            setDuelResults(prev => {
+              const merged = [...prev, ...results];
+              const uniqueResults = Array.from(new Map(merged.map(item => [item.userId, item])).values());
+              uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+              return uniqueResults;
+            });
+          }
         } catch (e) {
           console.error(e);
+        } finally {
           if (active) setLoadingDuel(false);
         }
       };
-      
-      let unsubscribe: (() => void) | undefined;
-      fetchDuelRealtime().then(unsub => {
-        if (unsub) unsubscribe = unsub;
-      });
-
-      return () => { 
-        active = false; 
-        if (unsubscribe) unsubscribe();
-      };
+      fetchDuel();
     }
+    return () => { active = false; };
   }, [currentView, currentDuelId, user]); // added user to dependency to refetch after login
 
   useEffect(() => {
@@ -163,21 +144,9 @@ export function Game() {
         // Save to Firestore if user is authenticated and not already saved
         if (user && gameSeed !== null && startTime && !hasSavedRef.current) {
            hasSavedRef.current = true;
-           const finalTimeMs = (endTime || Date.now()) - startTime;
+           const finalTimeMs = Date.now() - startTime;
            const saveRecord = async () => {
              try {
-               const { doc, getDoc, setDoc } = await import('firebase/firestore');
-               // Ensure user doc exists for security rules fk check
-               const userRef = doc(db, 'users', user.uid);
-               const userSnap = await getDoc(userRef);
-               if (!userSnap.exists()) {
-                 await setDoc(userRef, {
-                   userId: user.uid,
-                   name: (user.displayName || 'Player').slice(0, 50),
-                   createdAt: serverTimestamp()
-                 });
-               }
-
                await addDoc(collection(db, 'game_records'), {
                  userId: user.uid,
                  seed: gameSeed,
@@ -187,19 +156,24 @@ export function Game() {
                });
 
                if (currentDuelId) {
-                 const challengerName = (user.displayName || 'Challenger').slice(0, 50);
                  await addDoc(collection(db, 'duels', currentDuelId, 'results'), {
                    duelId: currentDuelId,
                    userId: user.uid,
-                   userName: challengerName,
+                   userName: user.displayName || 'Challenger',
                    timeMs: finalTimeMs,
                    playedAt: serverTimestamp()
                  });
+                 // Add to local state so it appears immediately
+                 setDuelResults(prev => {
+                   const newRes = { userId: user.uid, userName: user.displayName || 'Challenger', timeMs: finalTimeMs };
+                   const unique = Array.from(new Map([...prev, newRes].map(item => [item.userId, item])).values());
+                   unique.sort((a: any, b: any) => a.timeMs - b.timeMs);
+                   return unique;
+                 });
                }
                setHasSavedState(true);
-             } catch (e: any) {
-               console.error('Failed to save record:', e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
-               setLoginError(`Error al guardar: ${e.message}`);
+             } catch (e) {
+               console.error(e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
                hasSavedRef.current = false;
              }
            };
@@ -207,7 +181,7 @@ export function Game() {
         }
       }
     }
-  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty, currentDuelId, endTime]);
+  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty, currentDuelId]);
 
   const usedProps = useMemo(() => {
     if (!puzzle) return [];
