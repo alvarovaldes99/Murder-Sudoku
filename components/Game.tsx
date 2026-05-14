@@ -19,7 +19,7 @@ function formatTime(ms: number) {
 }
 
 export function Game() {
-  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime, difficulty, gameSeed } = useGameStore();
+  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime, difficulty, gameSeed, currentDuelId } = useGameStore();
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
@@ -27,11 +27,8 @@ export function Game() {
   const { user } = useAuth();
   const hasSavedRef = useRef(false);
 
-  const handleShare = async () => {
-    if (!gameSeed) return;
-    
-    // Si estamos en AI Studio, usamos la URL de GitHub Pages. Si no, usamos la actual.
-    // Cambia 'Murdoku' por el nombre exacto de tu repositorio si es diferente.
+  const getShareUrl = (duelId?: string) => {
+    if (!gameSeed) return '';
     const isAiStudio = window.location.hostname.includes('run.app');
     const baseUrl = isAiStudio 
       ? 'https://albaricoquevaldes.github.io/Murdoku/' 
@@ -40,7 +37,14 @@ export function Game() {
     const url = new URL(baseUrl);
     url.searchParams.set('seed', gameSeed.toString());
     url.searchParams.set('level', difficulty);
-    const shareUrl = url.toString();
+    if (duelId) {
+      url.searchParams.set('duel', duelId);
+    }
+    return url.toString();
+  };
+
+  const handleShare = async () => {
+    const shareUrl = getShareUrl();
 
     if (navigator.share) {
       try {
@@ -64,6 +68,40 @@ export function Game() {
       console.error('Failed to copy', err);
     }
   };
+
+  const [duelResults, setDuelResults] = useState<any[]>([]);
+  const [loadingDuel, setLoadingDuel] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (currentView === 'won' && currentDuelId) {
+      const fetchDuel = async () => {
+        setLoadingDuel(true);
+        try {
+          const { getDocs, getDoc, doc } = await import('firebase/firestore');
+          const resSnap = await getDocs(collection(db, 'duels', currentDuelId, 'results'));
+          const results = resSnap.docs.map(d => d.data() as any);
+          const duelDoc = await getDoc(doc(db, 'duels', currentDuelId));
+          if (duelDoc.exists()) {
+             const data = duelDoc.data();
+             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
+          }
+          if (active) {
+            // Remove duplicates if creator challenged themselves (should not happen normally)
+            const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+            uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+            setDuelResults(uniqueResults);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (active) setLoadingDuel(false);
+        }
+      };
+      fetchDuel();
+    }
+    return () => { active = false; };
+  }, [currentView, currentDuelId]);
 
   useEffect(() => {
     if (currentView === 'playing') {
@@ -100,8 +138,18 @@ export function Game() {
                  timeMs: finalTimeMs,
                  solvedAt: serverTimestamp()
                });
+
+               if (currentDuelId) {
+                 await addDoc(collection(db, 'duels', currentDuelId, 'results'), {
+                   duelId: currentDuelId,
+                   userId: user.uid,
+                   userName: user.displayName || 'Challenger',
+                   timeMs: finalTimeMs,
+                   playedAt: serverTimestamp()
+                 });
+               }
              } catch (e) {
-               handleFirestoreError(e, OperationType.CREATE, 'game_records');
+               console.error(e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
                hasSavedRef.current = false;
              }
            };
@@ -109,7 +157,7 @@ export function Game() {
         }
       }
     }
-  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty]);
+  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty, currentDuelId]);
 
   const usedProps = useMemo(() => {
     if (!puzzle) return [];
@@ -575,6 +623,28 @@ export function Game() {
                  <span className="text-stone-500 font-semibold text-sm uppercase tracking-wider">Tiempo final</span>
                  <span className="text-2xl font-black text-stone-800">{startTime && endTime ? formatTime(endTime - startTime) : '0:00'}</span>
                </div>
+
+               {currentDuelId && (
+                 <div className="w-full mb-4 bg-stone-50 border border-stone-200 rounded-xl p-4">
+                    <h3 className="text-base font-bold text-stone-800 mb-2">Clasificación del Duelo</h3>
+                    {loadingDuel ? (
+                      <p className="text-sm text-stone-500">Cargando resultados...</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {duelResults.map((r, i) => (
+                          <div key={r.userId} className={`flex justify-between items-center p-2 rounded-lg ${r.userId === user?.uid ? 'bg-emerald-100 border border-emerald-200' : 'bg-white border border-stone-200'}`}>
+                            <span className="font-semibold text-stone-700 flex items-center gap-2">
+                              {i === 0 && <span className="text-amber-500">🏆</span>}
+                              {r.userName}
+                            </span>
+                            <span className="font-mono font-bold text-stone-600">{formatTime(r.timeMs)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                 </div>
+               )}
+
                <button 
                   onClick={handleShare}
                   className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold text-lg py-3 rounded-xl transition-all active:scale-95 shadow-sm mb-3 flex items-center justify-center gap-2"

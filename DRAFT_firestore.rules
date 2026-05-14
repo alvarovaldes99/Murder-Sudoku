@@ -67,5 +67,55 @@ service cloud.firestore {
       allow update: if false; // Game records are immutable once saved
       allow delete: if false;
     }
+
+    // Duel validation
+    function isValidDuel(data) {
+      return data.keys().hasAll(['creatorId', 'creatorName', 'seed', 'difficulty', 'creatorTimeMs', 'createdAt']) &&
+             data.keys().size() == 6 &&
+             data.creatorId is string && data.creatorId.size() > 0 && data.creatorId.size() <= 128 && data.creatorId == request.auth.uid &&
+             data.creatorName is string && data.creatorName.size() > 0 && data.creatorName.size() <= 50 &&
+             data.seed is number &&
+             data.difficulty is string && data.difficulty.size() > 0 && data.difficulty.size() <= 20 &&
+             data.creatorTimeMs is number && data.creatorTimeMs > 0 &&
+             data.createdAt == request.time;
+    }
+
+    match /duels/{duelId} {
+      allow get: if isValidId(duelId); // Anyone can fetch a duel
+      allow list: if false; // List is generally not needed yet, or could be restricted to creator
+
+      allow create: if isSignedIn() &&
+                       isValidId(duelId) &&
+                       isValidDuel(incoming()) &&
+                       exists(/databases/$(database)/documents/users/$(incoming().creatorId));
+      allow update: if false; // Duels are immutable
+      allow delete: if false;
+      
+      // DuelResult validation
+      function isValidDuelResult(data, currentDuelId) {
+        return data.keys().hasAll(['duelId', 'userId', 'userName', 'timeMs', 'playedAt']) &&
+               data.keys().size() == 5 &&
+               data.duelId == currentDuelId &&
+               data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 && data.userId == request.auth.uid &&
+               data.userName is string && data.userName.size() > 0 && data.userName.size() <= 50 &&
+               data.timeMs is number && data.timeMs > 0 &&
+               data.playedAt == request.time;
+      }
+
+      match /results/{resultId} {
+        allow get: if isValidId(duelId) && isValidId(resultId);
+        // We evaluate existing().duelId against the path param though not strictly required,
+        // it's safer to just check the document properties if we needed to, but we just check the path
+        allow list: if isValidId(duelId); // Anyone can list results of a specific duel
+        
+        allow create: if isSignedIn() &&
+                         isValidId(duelId) &&
+                         isValidId(resultId) &&
+                         isValidDuelResult(incoming(), duelId) &&
+                         exists(/databases/$(database)/documents/duels/$(duelId)); // Make sure duel exists
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
   }
 }

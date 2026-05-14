@@ -24,8 +24,9 @@ interface GameState {
   startTime: number | null;
   endTime: number | null;
   gameSeed: number | null;
+  currentDuelId: string | null;
   
-  startLevel: (difficulty: DifficultyLevel, customSeed?: number) => void;
+  startLevel: (difficulty: DifficultyLevel, customSeed?: number, duelId?: string) => void;
   goHome: () => void;
   
   placeCharacter: (charId: string, r: number, c: number) => void;
@@ -50,8 +51,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   startTime: null,
   endTime: null,
   gameSeed: null,
+  currentDuelId: null,
 
-  startLevel: (difficulty, customSeed) => {
+  startLevel: (difficulty, customSeed, duelId) => {
     // Generate a valid puzzle
     let p = null;
     let attempts = 0;
@@ -67,10 +69,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       p = generatePuzzle('Muy Fácil');
       if (!p) return; // give up
     }
-    set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null, gameSeed: seed });
+    set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null, gameSeed: seed, currentDuelId: duelId || null });
   },
 
-  goHome: () => set({ currentView: 'menu', puzzle: null, placements: [], drafts: {}, crosses: {}, history: [], startTime: null, endTime: null }),
+  goHome: () => set({ currentView: 'menu', puzzle: null, placements: [], drafts: {}, crosses: {}, history: [], startTime: null, endTime: null, currentDuelId: null }),
 
   placeCharacter: (charId, r, c) => {
     const state = get();

@@ -17,12 +17,13 @@ export default function Home() {
     const searchParams = new URLSearchParams(window.location.search);
     const seed = searchParams.get('seed');
     const levelStr = searchParams.get('level');
+    const duelId = searchParams.get('duel');
     
     if (seed && levelStr) {
       const level = decodeURIComponent(levelStr) as any;
       const seedNum = parseInt(seed, 10);
       if (!isNaN(seedNum)) {
-        startLevel(level, seedNum);
+        startLevel(level, seedNum, duelId || undefined);
         window.history.replaceState({}, '', window.location.pathname);
       }
     }

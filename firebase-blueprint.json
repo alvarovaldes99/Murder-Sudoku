@@ -23,6 +23,33 @@
         "solvedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "seed", "difficulty", "timeMs", "solvedAt"]
+    },
+    "Duel": {
+      "title": "Duel",
+      "description": "A duel challenge created by a user",
+      "type": "object",
+      "properties": {
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "seed": { "type": "number" },
+        "difficulty": { "type": "string" },
+        "creatorTimeMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["creatorId", "creatorName", "seed", "difficulty", "creatorTimeMs", "createdAt"]
+    },
+    "DuelResult": {
+      "title": "Duel Result",
+      "description": "A challenger's result for a duel",
+      "type": "object",
+      "properties": {
+        "duelId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "timeMs": { "type": "number" },
+        "playedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["duelId", "userId", "userName", "timeMs", "playedAt"]
     }
   },
   "firestore": {
@@ -33,6 +60,14 @@
     "/game_records/{recordId}": {
       "schema": { "$ref": "#/entities/GameRecord" },
       "description": "All completed games; easily listable per user"
+    },
+    "/duels/{duelId}": {
+      "schema": { "$ref": "#/entities/Duel" },
+      "description": "Duel challenges created by users"
+    },
+    "/duels/{duelId}/results/{resultId}": {
+      "schema": { "$ref": "#/entities/DuelResult" },
+      "description": "Results of players playing a specific duel"
     }
   }
 }
