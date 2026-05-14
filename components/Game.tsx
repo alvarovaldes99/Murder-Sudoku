@@ -24,8 +24,25 @@ export function Game() {
   const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
   const [copied, setCopied] = useState<boolean>(false);
-  const { user } = useAuth();
+  const { user, loading: loadingAuth } = useAuth();
   const hasSavedRef = useRef(false);
+  const [hasSavedState, setHasSavedState] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      setLoginError('');
+      const { loginWithGoogle } = await import('@/lib/firebase');
+      await loginWithGoogle();
+    } catch (e: any) {
+      if (e?.code === 'auth/unauthorized-domain') {
+        setLoginError('Dominio no autorizado.');
+      } else {
+        setLoginError('Error al iniciar sesión.');
+      }
+      setTimeout(() => setLoginError(''), 5000);
+    }
+  };
 
   const getShareUrl = (duelId?: string) => {
     if (!gameSeed) return '';
@@ -78,46 +95,30 @@ export function Game() {
       const fetchDuel = async () => {
         setLoadingDuel(true);
         try {
-          const { onSnapshot, getDoc, doc } = await import('firebase/firestore');
-          let creatorData: any = null;
-          
+          const { getDocs, getDoc, doc } = await import('firebase/firestore');
+          const resSnap = await getDocs(collection(db, 'duels', currentDuelId, 'results'));
+          const results = resSnap.docs.map(d => d.data() as any);
           const duelDoc = await getDoc(doc(db, 'duels', currentDuelId));
           if (duelDoc.exists()) {
              const data = duelDoc.data();
-             creatorData = { userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs };
+             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
           }
-
-          const unsubscribe = onSnapshot(collection(db, 'duels', currentDuelId, 'results'), (resSnap) => {
-             if (!active) return;
-             const results = resSnap.docs.map(d => d.data() as any);
-             if (creatorData) results.push(creatorData);
-             const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
-             uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
-             setDuelResults(uniqueResults);
-             setLoadingDuel(false);
-          }, (err) => {
-             console.error(err);
-             if (active) setLoadingDuel(false);
-          });
-          
-          return unsubscribe;
+          if (active) {
+            // Remove duplicates if creator challenged themselves (should not happen normally)
+            const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+            uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+            setDuelResults(uniqueResults);
+          }
         } catch (e) {
           console.error(e);
+        } finally {
           if (active) setLoadingDuel(false);
         }
       };
-      
-      let unsub: any;
-      fetchDuel().then(u => unsub = u);
-      return () => { 
-        active = false; 
-        if (unsub) unsub(); 
-      };
+      fetchDuel();
     }
-    return () => {
-      active = false;
-    };
-  }, [currentView, currentDuelId]);
+    return () => { active = false; };
+  }, [currentView, currentDuelId, user]); // added user to dependency to refetch after login
 
   useEffect(() => {
     if (currentView === 'playing') {
@@ -152,8 +153,7 @@ export function Game() {
                  seed: gameSeed,
                  difficulty,
                  timeMs: finalTimeMs,
-                 solvedAt: serverTimestamp(),
-                 ...(currentDuelId ? { duelId: currentDuelId } : {})
+                 solvedAt: serverTimestamp()
                });
 
                if (currentDuelId) {
@@ -164,7 +164,15 @@ export function Game() {
                    timeMs: finalTimeMs,
                    playedAt: serverTimestamp()
                  });
+                 // Add to local state so it appears immediately
+                 setDuelResults(prev => {
+                   const newRes = { userId: user.uid, userName: user.displayName || 'Challenger', timeMs: finalTimeMs };
+                   const unique = Array.from(new Map([...prev, newRes].map(item => [item.userId, item])).values());
+                   unique.sort((a: any, b: any) => a.timeMs - b.timeMs);
+                   return unique;
+                 });
                }
+               setHasSavedState(true);
              } catch (e) {
                console.error(e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
                hasSavedRef.current = false;
@@ -660,6 +668,25 @@ export function Game() {
                       </div>
                     )}
                  </div>
+               )}
+
+               {/* Auth / Login to save */}
+               {!loadingAuth && !user && (
+                 <div className="w-full mb-4 bg-stone-50 border border-stone-200 rounded-xl p-4 flex flex-col items-center">
+                   <p className="text-sm text-stone-600 mb-3 text-center">Inicia sesión para guardar tu resultado y unirte al duelo.</p>
+                   <button 
+                     onClick={handleLogin}
+                     className="w-full flex justify-center items-center gap-2 bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold py-2 rounded-lg transition-all"
+                   >
+                      Iniciar sesión con Google
+                   </button>
+                   {loginError && <p className="text-xs text-red-500 mt-2 text-center">{loginError}</p>}
+                 </div>
+               )}
+               {user && hasSavedState && (
+                 <p className="text-sm font-semibold text-emerald-600 mb-4 bg-emerald-50 px-4 py-2 border border-emerald-200 rounded-xl w-full text-center">
+                   ¡Resultado guardado como {user.displayName}!
+                 </p>
                )}
 
                <button 
