@@ -129,14 +129,14 @@ export function Game() {
   };
 
   return (
-    <div className="flex flex-col w-full h-full max-w-lg mx-auto bg-stone-50 relative">
+    <div className="flex flex-col w-full h-full max-w-lg lg:max-w-5xl mx-auto bg-stone-50 relative lg:grid lg:grid-cols-[1fr_400px] xl:grid-cols-[1fr_420px] lg:grid-rows-[auto_1fr] lg:gap-x-10 lg:pt-6 lg:px-6 lg:overflow-hidden">
       
       {/* Sticky Top Section */}
-      <div className="sticky top-0 z-[100] bg-stone-50/95 backdrop-blur-md pb-3 flex flex-col gap-2">
+      <div className="sticky top-0 z-[100] bg-stone-50/95 backdrop-blur-md pb-3 flex flex-col gap-2 lg:col-start-1 lg:row-start-1 lg:static lg:bg-transparent lg:pb-4 lg:z-10">
         
         {/* Header */}
-        <header className="flex items-center justify-between px-3 py-2 bg-white border-b border-stone-200 shadow-sm">
-          <button onClick={goHome} className="p-1.5 text-stone-500 hover:text-stone-900 rounded-full hover:bg-stone-100 transition-colors -ml-1.5">
+        <header className="flex items-center justify-between px-3 py-2 bg-white border-b lg:border border-stone-200 shadow-sm lg:rounded-2xl">
+          <button onClick={goHome} className="p-1.5 text-stone-500 hover:text-stone-900 rounded-full hover:bg-stone-100 transition-colors -ml-1.5 lg:ml-0">
             <ArrowLeft size={24} />
           </button>
           <div className="flex items-baseline justify-center flex-1 gap-3">
@@ -149,7 +149,7 @@ export function Game() {
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2 -mr-1.5">
+          <div className="flex items-center gap-2 -mr-1.5 lg:mr-0">
             <button 
               onClick={undo} 
               disabled={history.length === 0}
@@ -164,7 +164,7 @@ export function Game() {
         </header>
 
         {/* Actions Bar & Character Tray Wrapper */}
-        <div className="px-4 flex flex-col gap-2">
+        <div className="px-4 lg:px-0 flex flex-col gap-2">
           {/* Actions Bar */}
           <div className="bg-white p-2 rounded-2xl shadow-sm border border-stone-200 flex gap-2">
             <button 
@@ -185,7 +185,7 @@ export function Game() {
               onClick={() => {
                 setMode('cross');
                 setSelectedCharId(null);
-              }} 
+               }} 
               className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${mode === 'cross' ? 'bg-rose-600 text-white shadow-md' : 'text-stone-500 hover:bg-stone-100'}`}
             >
               <X size={20} className="mb-1" />
@@ -244,10 +244,11 @@ export function Game() {
       </div>
 
       {/* Main Game Area */}
-      <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col gap-6 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col gap-6 scrollbar-hide lg:contents">
 
-        {/* Board */}
-        <div className="w-full aspect-square bg-stone-900 border-[4px] border-stone-900 rounded-2xl relative flex flex-col mx-auto max-w-[400px] shadow-xl md:border-[6px]">
+        {/* Board container */}
+        <div className="w-full lg:col-start-2 lg:row-start-1 lg:row-end-3 lg:overflow-visible flex flex-col shrink-0 lg:pt-0">
+          <div className="w-full aspect-square bg-stone-900 border-[4px] border-stone-900 rounded-2xl relative flex flex-col mx-auto max-w-[400px] xl:max-w-[420px] shadow-xl md:border-[6px]">
           
           {puzzle.cells.map((row, r) => (
              <div key={r} className="flex flex-1 w-full gap-[2px] mb-[2px] last:mb-0">
@@ -423,7 +424,10 @@ export function Game() {
           </div>
 
         </div>
+        </div> {/* Close Board container */}
 
+        {/* Right Column container (Clues & Legend) */}
+        <div className="lg:col-start-1 lg:row-start-2 lg:overflow-y-auto lg:h-full lg:pb-12 xl:pr-4 flex flex-col gap-6 lg:py-0 scrollbar-hide w-full mt-2 lg:mt-0 lg:pr-2">
         {/* Clues List */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
            <h3 className="font-bold text-stone-800 flex items-center mb-4 pb-2 border-b border-stone-100">
@@ -468,6 +472,8 @@ export function Game() {
              </div>
           </div>
         )}
+
+        </div> {/* Close Right Column container */}
 
       </div>
 
