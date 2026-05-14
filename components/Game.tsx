@@ -145,9 +145,21 @@ export function Game() {
         // Save to Firestore if user is authenticated and not already saved
         if (user && gameSeed !== null && startTime && !hasSavedRef.current) {
            hasSavedRef.current = true;
-           const finalTimeMs = Date.now() - startTime;
+           const finalTimeMs = (endTime || Date.now()) - startTime;
            const saveRecord = async () => {
              try {
+               const { doc, getDoc, setDoc } = await import('firebase/firestore');
+               // Ensure user doc exists for security rules fk check
+               const userRef = doc(db, 'users', user.uid);
+               const userSnap = await getDoc(userRef);
+               if (!userSnap.exists()) {
+                 await setDoc(userRef, {
+                   userId: user.uid,
+                   name: (user.displayName || 'Player').slice(0, 50),
+                   createdAt: serverTimestamp()
+                 });
+               }
+
                await addDoc(collection(db, 'game_records'), {
                  userId: user.uid,
                  seed: gameSeed,
@@ -157,16 +169,17 @@ export function Game() {
                });
 
                if (currentDuelId) {
+                 const challengerName = (user.displayName || 'Challenger').slice(0, 50);
                  await addDoc(collection(db, 'duels', currentDuelId, 'results'), {
                    duelId: currentDuelId,
                    userId: user.uid,
-                   userName: user.displayName || 'Challenger',
+                   userName: challengerName,
                    timeMs: finalTimeMs,
                    playedAt: serverTimestamp()
                  });
                  // Add to local state so it appears immediately
                  setDuelResults(prev => {
-                   const newRes = { userId: user.uid, userName: user.displayName || 'Challenger', timeMs: finalTimeMs };
+                   const newRes = { userId: user.uid, userName: challengerName, timeMs: finalTimeMs };
                    const unique = Array.from(new Map([...prev, newRes].map(item => [item.userId, item])).values());
                    unique.sort((a: any, b: any) => a.timeMs - b.timeMs);
                    return unique;
@@ -174,7 +187,7 @@ export function Game() {
                }
                setHasSavedState(true);
              } catch (e) {
-               console.error(e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
+               console.error('Failed to save record:', e); // just log, we don't handleFirestoreError rigidly if duel missing etc.
                hasSavedRef.current = false;
              }
            };
@@ -182,7 +195,7 @@ export function Game() {
         }
       }
     }
-  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty, currentDuelId]);
+  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty, currentDuelId, endTime]);
 
   const usedProps = useMemo(() => {
     if (!puzzle) return [];
