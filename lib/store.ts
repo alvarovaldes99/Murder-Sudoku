@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { generatePuzzle, PuzzleState, Point, DifficultyLevel } from './generator';
+import { generatePuzzle, setSeed, PuzzleState, Point, DifficultyLevel } from './generator';
 
 interface CharacterPlacement {
   charId: string;
@@ -23,8 +23,9 @@ interface GameState {
   history: HistoryState[];
   startTime: number | null;
   endTime: number | null;
+  gameSeed: number | null;
   
-  startLevel: (difficulty: DifficultyLevel) => void;
+  startLevel: (difficulty: DifficultyLevel, customSeed?: number) => void;
   goHome: () => void;
   
   placeCharacter: (charId: string, r: number, c: number) => void;
@@ -48,11 +49,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   history: [],
   startTime: null,
   endTime: null,
+  gameSeed: null,
 
-  startLevel: (difficulty) => {
+  startLevel: (difficulty, customSeed) => {
     // Generate a valid puzzle
     let p = null;
     let attempts = 0;
+    const seed = customSeed !== undefined ? customSeed : Math.floor(Math.random() * 2147483647);
+    setSeed(seed);
     while (!p && attempts < 10) {
       p = generatePuzzle(difficulty);
       attempts++;
@@ -63,7 +67,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       p = generatePuzzle('Muy Fácil');
       if (!p) return; // give up
     }
-    set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null });
+    set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null, gameSeed: seed });
   },
 
   goHome: () => set({ currentView: 'menu', puzzle: null, placements: [], drafts: {}, crosses: {}, history: [], startTime: null, endTime: null }),

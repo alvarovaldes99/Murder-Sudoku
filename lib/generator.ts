@@ -52,18 +52,7 @@ export interface PuzzleState {
   solution: Point[]; // solution[i] corresponds to characters[i]
 }
 
-function randomItem<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
-function shuffle<T>(array: T[]): T[] {
-  const newArr = [...array];
-  for (let i = newArr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-  }
-  return newArr;
-}
 
 function getZoneText(zoneName: string): string {
   const fem = ["Cocina", "Biblioteca", "Terraza", "Entrada", "Glorieta", "Nave", "Sacristía", "Cripta", "Capilla", "Caja", "Oficina", "Recepción", "Cafetería"];
@@ -75,6 +64,34 @@ function getZoneText(zoneName: string): string {
 }
 
 export type DifficultyLevel = 'Muy Fácil' | 'Fácil' | 'Medio' | 'Difícil' | 'Experto';
+
+let _seed = 0;
+export function setSeed(seed: number) {
+  _seed = Math.floor(seed);
+}
+export function getSeed() {
+  return _seed;
+}
+
+function random(): number {
+  let t = _seed += 0x6D2B79F5;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function randomItem<T>(arr: T[]): T {
+  return arr[Math.floor(random() * arr.length)];
+}
+
+function shuffle<T>(array: T[]): T[] {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
 
 export function generatePuzzle(difficulty: DifficultyLevel): PuzzleState | null {
   const N = (difficulty === 'Muy Fácil' || difficulty === 'Fácil') ? 6 :
@@ -92,8 +109,8 @@ export function generatePuzzle(difficulty: DifficultyLevel): PuzzleState | null 
 
     const seeds: Point[] = [];
     while (seeds.length < numZones) {
-      const r = Math.floor(Math.random() * N);
-      const c = Math.floor(Math.random() * N);
+      const r = Math.floor(random() * N);
+      const c = Math.floor(random() * N);
       if (!seeds.some(s => s.r === r && s.c === c)) {
         cells[r][c].zoneId = seeds.length;
         seeds.push({ r, c });
@@ -105,8 +122,8 @@ export function generatePuzzle(difficulty: DifficultyLevel): PuzzleState | null 
     while (unassigned > 0 && iterations < 1000) {
       iterations++;
       const [dr, dc] = randomItem([[-1, 0], [1, 0], [0, -1], [0, 1]]);
-      const r = Math.floor(Math.random() * N);
-      const c = Math.floor(Math.random() * N);
+      const r = Math.floor(random() * N);
+      const c = Math.floor(random() * N);
       if (cells[r][c].zoneId === -1) {
         let neighborZone = -1;
         // Simple heuristic: just look for ANY assigned neighbor
@@ -203,11 +220,11 @@ export function generatePuzzle(difficulty: DifficultyLevel): PuzzleState | null 
     for (let r = 0; r < N; r++) {
       for (let c = 0; c < N; c++) {
         if (isSolution(r, c)) {
-          if (Math.random() < 0.35) {
+          if (random() < 0.35) {
             cells[r][c].prop = { ...randomItem(ambient.validProps), type: 'valid' } as Prop;
           }
         } else {
-          const rnd = Math.random();
+          const rnd = random();
           if (rnd < 0.25) {
             cells[r][c].prop = { ...randomItem(ambient.blockers), type: 'blocker' } as Prop;
           } else if (rnd < 0.35) {

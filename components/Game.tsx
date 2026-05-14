@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useGameStore } from '@/lib/store';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, RotateCcw, CheckCircle, X, Pencil, UserCheck, Undo2, Timer } from 'lucide-react';
+import { ArrowLeft, RotateCcw, CheckCircle, X, Pencil, UserCheck, Undo2, Timer, Share2, Copy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CharacterSprite, PropSprite, FloorSprite } from './Sprite';
 import type { Prop } from '@/lib/generator';
@@ -16,10 +16,41 @@ function formatTime(ms: number) {
 }
 
 export function Game() {
-  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime } = useGameStore();
+  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime, difficulty, gameSeed } = useGameStore();
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleShare = async () => {
+    if (!gameSeed) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', gameSeed.toString());
+    url.searchParams.set('level', difficulty);
+    const shareUrl = url.toString();
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '¡Juega esta partida de Misterio con mi semilla!',
+          text: `Podrás resolver este caso? (Dificultad: ${difficulty})`,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        console.error('Error sharing', err);
+      }
+    }
+    
+    // Fallback to copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
 
   useEffect(() => {
     if (currentView === 'playing') {
@@ -150,6 +181,14 @@ export function Game() {
             </div>
           </div>
           <div className="flex items-center gap-2 -mr-1.5 lg:mr-0">
+            <button 
+              onClick={handleShare}
+              title="Compartir semilla"
+              className="p-1.5 text-stone-500 hover:text-stone-900 rounded-full hover:bg-stone-100 transition-colors relative"
+            >
+              {copied ? <CheckCircle size={18} className="text-emerald-500" /> : <Share2 size={20} />}
+            </button>
+            <div className="w-px h-5 bg-stone-200 mx-1"></div>
             <button 
               onClick={undo} 
               disabled={history.length === 0}
@@ -498,10 +537,17 @@ export function Game() {
                <p className="text-stone-500 font-medium text-center mb-6">
                  Has colocado a todos los personajes correctamente.
                </p>
-               <div className="bg-stone-50 border border-stone-200 rounded-xl px-6 py-3 mb-8 w-full flex justify-between items-center">
+               <div className="bg-stone-50 border border-stone-200 rounded-xl px-6 py-3 mb-4 w-full flex justify-between items-center">
                  <span className="text-stone-500 font-semibold text-sm uppercase tracking-wider">Tiempo final</span>
                  <span className="text-2xl font-black text-stone-800">{startTime && endTime ? formatTime(endTime - startTime) : '0:00'}</span>
                </div>
+               <button 
+                  onClick={handleShare}
+                  className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold text-lg py-3 rounded-xl transition-all active:scale-95 shadow-sm mb-3 flex items-center justify-center gap-2"
+               >
+                 {copied ? <CheckCircle size={20} /> : <Share2 size={20} />}
+                 {copied ? '¡Enlace copiado!' : 'Compartir con un amigo'}
+               </button>
                <button 
                   onClick={goHome}
                   className="w-full bg-stone-900 hover:bg-stone-800 text-white font-bold text-lg py-4 rounded-xl transition-all active:scale-95 shadow-md"
