@@ -1,10 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useGameStore } from '@/lib/store';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, RotateCcw, CheckCircle, X, Pencil, UserCheck, Undo2, Timer, Share2, Copy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CharacterSprite, PropSprite, FloorSprite } from './Sprite';
 import type { Prop } from '@/lib/generator';
+import { useAuth } from '@/hooks/useAuth';
+import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 type InteractionMode = 'place' | 'draft' | 'cross';
 
@@ -21,10 +24,20 @@ export function Game() {
   const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
   const [copied, setCopied] = useState<boolean>(false);
+  const { user } = useAuth();
+  const hasSavedRef = useRef(false);
 
   const handleShare = async () => {
     if (!gameSeed) return;
-    const url = new URL(window.location.href);
+    
+    // Si estamos en AI Studio, usamos la URL de GitHub Pages. Si no, usamos la actual.
+    // Cambia 'Murdoku' por el nombre exacto de tu repositorio si es diferente.
+    const isAiStudio = window.location.hostname.includes('run.app');
+    const baseUrl = isAiStudio 
+      ? 'https://albaricoquevaldes.github.io/Murdoku/' 
+      : window.location.origin + window.location.pathname;
+
+    const url = new URL(baseUrl);
     url.searchParams.set('seed', gameSeed.toString());
     url.searchParams.set('level', difficulty);
     const shareUrl = url.toString();
@@ -73,9 +86,30 @@ export function Game() {
             colors: ['#10B981', '#F59E0B', '#EF4444', '#3B82F6']
           });
         }
+
+        // Save to Firestore if user is authenticated and not already saved
+        if (user && gameSeed !== null && startTime && !hasSavedRef.current) {
+           hasSavedRef.current = true;
+           const finalTimeMs = Date.now() - startTime;
+           const saveRecord = async () => {
+             try {
+               await addDoc(collection(db, 'game_records'), {
+                 userId: user.uid,
+                 seed: gameSeed,
+                 difficulty,
+                 timeMs: finalTimeMs,
+                 solvedAt: serverTimestamp()
+               });
+             } catch (e) {
+               handleFirestoreError(e, OperationType.CREATE, 'game_records');
+               hasSavedRef.current = false;
+             }
+           };
+           saveRecord();
+        }
       }
     }
-  }, [placements, puzzle, checkWin]);
+  }, [placements, puzzle, checkWin, user, gameSeed, startTime, difficulty]);
 
   const usedProps = useMemo(() => {
     if (!puzzle) return [];

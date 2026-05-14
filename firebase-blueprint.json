@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public profile for a player",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "createdAt"]
+    },
+    "GameRecord": {
+      "title": "Completed Game Record",
+      "description": "A record of a game solved by a player",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "seed": { "type": "number" },
+        "difficulty": { "type": "string", "enum": ["Muy Fácil", "Fácil", "Medio", "Difícil", "Experto"] },
+        "timeMs": { "type": "number" },
+        "solvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "seed", "difficulty", "timeMs", "solvedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/game_records/{recordId}": {
+      "schema": { "$ref": "#/entities/GameRecord" },
+      "description": "All completed games; easily listable per user"
+    }
+  }
+}
