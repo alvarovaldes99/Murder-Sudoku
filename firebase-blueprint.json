@@ -20,7 +20,8 @@
         "seed": { "type": "number" },
         "difficulty": { "type": "string", "enum": ["Muy Fácil", "Fácil", "Medio", "Difícil", "Experto"] },
         "timeMs": { "type": "number" },
-        "solvedAt": { "type": "string", "format": "date-time" }
+        "solvedAt": { "type": "string", "format": "date-time" },
+        "duelId": { "type": "string" }
       },
       "required": ["userId", "seed", "difficulty", "timeMs", "solvedAt"]
     },

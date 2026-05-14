@@ -12,6 +12,7 @@ interface GameRecord {
   difficulty: string;
   timeMs: number;
   solvedAt: Date;
+  duelId?: string;
 }
 
 interface StatsModalProps {
@@ -25,14 +26,47 @@ function formatTime(ms: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function RecordItem({ record, allRecords, onClose }: { record: GameRecord, allRecords: GameRecord[], onClose: () => void }) {
+function RecordItem({ record, allRecords, onClose, onUpdateRecord }: { record: GameRecord, allRecords: GameRecord[], onClose: () => void, onUpdateRecord: (id: string, duelId: string) => void }) {
   const { user } = useAuth();
   const startLevel = useGameStore(state => state.startLevel);
   const [showShareOptions, setShowShareOptions] = useState(false);
+  const [showDuelStatus, setShowDuelStatus] = useState(false);
+  const [duelResults, setDuelResults] = useState<any[]>([]);
+  const [loadingDuel, setLoadingDuel] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const playedCount = allRecords.filter(r => r.seed === record.seed).length;
+
+  useEffect(() => {
+    let active = true;
+    if (showDuelStatus && record.duelId) {
+      const fetchDuel = async () => {
+        setLoadingDuel(true);
+        try {
+          const { getDocs, collection, doc, getDoc } = await import('firebase/firestore');
+          const resSnap = await getDocs(collection(db, 'duels', record.duelId!, 'results'));
+          if (!active) return;
+          const results = resSnap.docs.map(d => d.data() as any);
+          const duelDoc = await getDoc(doc(db, 'duels', record.duelId!));
+          if (!active) return;
+          if (duelDoc.exists()) {
+             const data = duelDoc.data();
+             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
+          }
+          const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+          uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+          setDuelResults(uniqueResults);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (active) setLoadingDuel(false);
+        }
+      };
+      fetchDuel();
+    }
+    return () => { active = false; };
+  }, [showDuelStatus, record.duelId]);
 
   const handleReplay = () => {
     startLevel(record.difficulty as any, record.seed);
@@ -85,6 +119,7 @@ function RecordItem({ record, allRecords, onClose }: { record: GameRecord, allRe
     if (!user) return;
 
     try {
+      const { updateDoc, doc } = await import('firebase/firestore');
       // Create a duel document
       const duelRef = await addDoc(collection(db, 'duels'), {
         creatorId: user.uid,
@@ -95,6 +130,12 @@ function RecordItem({ record, allRecords, onClose }: { record: GameRecord, allRe
         createdAt: serverTimestamp()
       });
       
+      // Update the game record
+      await updateDoc(doc(db, 'game_records', record.id), {
+        duelId: duelRef.id
+      });
+      onUpdateRecord(record.id, duelRef.id);
+      
       const duelUrl = generateUrl(duelRef.id);
       copyOrShare(duelUrl);
     } catch (err) {
@@ -103,7 +144,12 @@ function RecordItem({ record, allRecords, onClose }: { record: GameRecord, allRe
   };
 
   return (
-    <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 flex flex-col gap-2 relative">
+    <div className={`bg-stone-50 border ${record.duelId ? 'border-amber-200' : 'border-stone-200'} rounded-xl p-3 flex flex-col gap-2 relative`}>
+      {record.duelId && (
+        <div className="absolute -top-2 -right-2 bg-amber-100 border border-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+          <Trophy size={10} /> Duelo
+        </div>
+      )}
       <div className="flex justify-between items-center">
         <div className="flex flex-col">
           <span className="font-bold text-stone-800 text-sm">{record.difficulty}</span>
@@ -124,17 +170,63 @@ function RecordItem({ record, allRecords, onClose }: { record: GameRecord, allRe
         >
           <RotateCcw size={14} /> Rejugar
         </button>
-        <button 
-          onClick={() => setShowShareOptions(!showShareOptions)}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-bold text-xs transition-colors ${showShareOptions ? 'bg-blue-200 text-blue-800' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'}`}
-        >
-          {copied ? <Clock size={14} /> /* copied placeholder */ : <Share2 size={14} />} 
-          {copied ? 'Copiado' : 'Compartir'}
-        </button>
+        {record.duelId ? (
+          <button 
+            onClick={() => setShowDuelStatus(!showDuelStatus)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-bold text-xs transition-colors ${showDuelStatus ? 'bg-amber-200 text-amber-800' : 'bg-amber-100 hover:bg-amber-200 text-amber-700'}`}
+          >
+            <Users size={14} /> Clasificación
+          </button>
+        ) : (
+          <button 
+            onClick={() => setShowShareOptions(!showShareOptions)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-bold text-xs transition-colors ${showShareOptions ? 'bg-blue-200 text-blue-800' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'}`}
+          >
+            {copied ? <Clock size={14} /> : <Share2 size={14} />} 
+            {copied ? 'Copiado' : 'Compartir'}
+          </button>
+        )}
       </div>
 
       <AnimatePresence>
-        {showShareOptions && (
+        {showDuelStatus && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-2 border-t border-stone-200 mt-1 flex flex-col gap-1.5">
+              <div className="flex gap-2 mb-1">
+                <button 
+                  onClick={() => copyOrShare(generateUrl(record.duelId))}
+                  className="w-full flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 py-1.5 rounded-md font-semibold text-xs border border-stone-200"
+                >
+                  <LinkIcon size={12} /> Invitar a duelo
+                </button>
+              </div>
+              {loadingDuel ? (
+                <p className="text-xs text-stone-500 text-center py-2">Cargando clasificación...</p>
+              ) : duelResults.length > 0 ? (
+                duelResults.map((r, i) => (
+                  <div key={r.userId} className={`flex justify-between items-center px-2 py-1.5 rounded-md text-xs ${r.userId === user?.uid ? 'bg-emerald-100 font-bold' : 'bg-white border border-stone-100'}`}>
+                    <span className="flex items-center gap-1.5 text-stone-700">
+                      {i === 0 && <span className="text-amber-500">🏆</span>}
+                      {r.userName}
+                    </span>
+                    <span className="font-mono text-stone-600">{formatTime(r.timeMs)}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-stone-500 text-center py-2">No hay resultados aún.</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showShareOptions && !record.duelId && (
           <motion.div 
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -170,6 +262,10 @@ export function StatsModal({ onClose }: StatsModalProps) {
   const { user } = useAuth();
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleUpdateRecord = (id: string, duelId: string) => {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, duelId } : r));
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -233,7 +329,7 @@ export function StatsModal({ onClose }: StatsModalProps) {
            )}
 
            {!loading && records.map(record => (
-             <RecordItem key={record.id} record={record} allRecords={records} onClose={onClose} />
+             <RecordItem key={record.id} record={record} allRecords={records} onClose={onClose} onUpdateRecord={handleUpdateRecord} />
            ))}
         </div>
       </motion.div>

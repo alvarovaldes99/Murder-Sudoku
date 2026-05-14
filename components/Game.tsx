@@ -78,29 +78,45 @@ export function Game() {
       const fetchDuel = async () => {
         setLoadingDuel(true);
         try {
-          const { getDocs, getDoc, doc } = await import('firebase/firestore');
-          const resSnap = await getDocs(collection(db, 'duels', currentDuelId, 'results'));
-          const results = resSnap.docs.map(d => d.data() as any);
+          const { onSnapshot, getDoc, doc } = await import('firebase/firestore');
+          let creatorData: any = null;
+          
           const duelDoc = await getDoc(doc(db, 'duels', currentDuelId));
           if (duelDoc.exists()) {
              const data = duelDoc.data();
-             results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
+             creatorData = { userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs };
           }
-          if (active) {
-            // Remove duplicates if creator challenged themselves (should not happen normally)
-            const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
-            uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
-            setDuelResults(uniqueResults);
-          }
+
+          const unsubscribe = onSnapshot(collection(db, 'duels', currentDuelId, 'results'), (resSnap) => {
+             if (!active) return;
+             const results = resSnap.docs.map(d => d.data() as any);
+             if (creatorData) results.push(creatorData);
+             const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+             uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+             setDuelResults(uniqueResults);
+             setLoadingDuel(false);
+          }, (err) => {
+             console.error(err);
+             if (active) setLoadingDuel(false);
+          });
+          
+          return unsubscribe;
         } catch (e) {
           console.error(e);
-        } finally {
           if (active) setLoadingDuel(false);
         }
       };
-      fetchDuel();
+      
+      let unsub: any;
+      fetchDuel().then(u => unsub = u);
+      return () => { 
+        active = false; 
+        if (unsub) unsub(); 
+      };
     }
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [currentView, currentDuelId]);
 
   useEffect(() => {
@@ -136,7 +152,8 @@ export function Game() {
                  seed: gameSeed,
                  difficulty,
                  timeMs: finalTimeMs,
-                 solvedAt: serverTimestamp()
+                 solvedAt: serverTimestamp(),
+                 ...(currentDuelId ? { duelId: currentDuelId } : {})
                });
 
                if (currentDuelId) {

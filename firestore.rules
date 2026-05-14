@@ -65,7 +65,12 @@ service cloud.firestore {
                        isValidGameRecord(incoming()) &&
                        exists(/databases/$(database)/documents/users/$(incoming().userId)); // atomic/fk check
                        
-      allow update: if false; // Game records are immutable once saved
+      allow update: if isSignedIn() &&
+                       isValidId(recordId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['duelId']) &&
+                       incoming().duelId is string && incoming().duelId.size() > 0 && incoming().duelId.size() <= 128;
+      
       allow delete: if false;
     }
 
