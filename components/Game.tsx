@@ -7,7 +7,7 @@ import { CharacterSprite, PropSprite, FloorSprite } from './Sprite';
 import type { Prop } from '@/lib/generator';
 import { useAuth } from '@/hooks/useAuth';
 import { db, handleFirestoreError, OperationType } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 type InteractionMode = 'place' | 'draft' | 'cross';
 
@@ -148,7 +148,7 @@ export function Game() {
            const finalTimeMs = Date.now() - startTime;
            const saveRecord = async () => {
              try {
-               await addDoc(collection(db, 'game_records'), {
+               const recordRef = await addDoc(collection(db, 'game_records'), {
                  userId: user.uid,
                  seed: gameSeed,
                  difficulty,
@@ -157,6 +157,7 @@ export function Game() {
                });
 
                if (currentDuelId) {
+                 await updateDoc(recordRef, { duelId: currentDuelId });
                  await addDoc(collection(db, 'duels', currentDuelId, 'results'), {
                    duelId: currentDuelId,
                    userId: user.uid,
