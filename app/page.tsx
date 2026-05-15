@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { useGameStore } from '@/lib/store';
 import { Menu } from '@/components/Menu';
 import { Game } from '@/components/Game';
-import { Header } from '@/components/Header';
 
 export default function Home() {
   const currentView = useGameStore(state => state.currentView);
@@ -31,8 +30,7 @@ export default function Home() {
   }, [startLevel]);
 
   return (
-    <main className="h-[100dvh] w-full overflow-hidden bg-stone-100 flex justify-center js-main-container relative">
-      <Header />
+    <main className="h-[100dvh] w-full overflow-hidden bg-stone-100 flex justify-center js-main-container">
       {currentView === 'menu' && <Menu />}
       {(currentView === 'playing' || currentView === 'won') && <Game />}
     </main>

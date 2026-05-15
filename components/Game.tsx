@@ -46,7 +46,10 @@ export function Game() {
 
   const getShareUrl = (duelId?: string) => {
     if (!gameSeed) return '';
-    const baseUrl = window.location.origin + window.location.pathname;
+    const isAiStudio = window.location.hostname.includes('run.app');
+    const baseUrl = isAiStudio 
+      ? 'https://albaricoquevaldes.github.io/Murdoku/' 
+      : window.location.origin + window.location.pathname;
 
     const url = new URL(baseUrl);
     url.searchParams.set('seed', gameSeed.toString());
@@ -101,12 +104,10 @@ export function Game() {
              results.push({ userId: data.creatorId, userName: data.creatorName, timeMs: data.creatorTimeMs });
           }
           if (active) {
-            setDuelResults(prev => {
-              const merged = [...prev, ...results];
-              const uniqueResults = Array.from(new Map(merged.map(item => [item.userId, item])).values());
-              uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
-              return uniqueResults;
-            });
+            // Remove duplicates if creator challenged themselves (should not happen normally)
+            const uniqueResults = Array.from(new Map(results.map(item => [item.userId, item])).values());
+            uniqueResults.sort((a: any, b: any) => a.timeMs - b.timeMs);
+            setDuelResults(uniqueResults);
           }
         } catch (e) {
           console.error(e);

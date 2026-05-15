@@ -74,7 +74,10 @@ function RecordItem({ record, allRecords, onClose, onUpdateRecord }: { record: G
   };
 
   const generateUrl = (duelId?: string) => {
-    const baseUrl = window.location.origin + window.location.pathname;
+    const isAiStudio = window.location.hostname.includes('run.app');
+    const baseUrl = isAiStudio 
+      ? 'https://albaricoquevaldes.github.io/Murdoku/' 
+      : window.location.origin + window.location.pathname;
     
     const url = new URL(baseUrl);
     url.searchParams.set('seed', record.seed.toString());
