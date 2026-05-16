@@ -262,6 +262,7 @@ export function StatsModal({ onClose }: StatsModalProps) {
   const { user } = useAuth();
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'normal' | 'duels'>('normal');
 
   const handleUpdateRecord = (id: string, duelId: string) => {
     setRecords(prev => prev.map(r => r.id === id ? { ...r, duelId } : r));
@@ -276,7 +277,7 @@ export function StatsModal({ onClose }: StatsModalProps) {
           collection(db, 'game_records'),
           where('userId', '==', user.uid),
           orderBy('solvedAt', 'desc'),
-          limit(20)
+          limit(50) // Increased limit slightly to ensure we grab some of both if possible
         );
         const snapshot = await getDocs(q);
         const fetched: GameRecord[] = snapshot.docs.map(doc => ({
@@ -294,6 +295,10 @@ export function StatsModal({ onClose }: StatsModalProps) {
 
     fetchRecords();
   }, [user]);
+
+  const visibleRecords = activeTab === 'normal' 
+    ? records.filter(r => !r.duelId) 
+    : records.filter(r => !!r.duelId);
 
   return (
     <motion.div 
@@ -317,18 +322,44 @@ export function StatsModal({ onClose }: StatsModalProps) {
              <X size={24} />
            </button>
         </div>
+
+        <div className="flex p-2 bg-stone-50 border-b border-stone-100">
+          <button
+            onClick={() => setActiveTab('normal')}
+            className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-colors ${
+              activeTab === 'normal'
+                ? 'bg-white text-stone-800 shadow-sm border border-stone-200'
+                : 'text-stone-500 hover:text-stone-700 hover:bg-stone-100'
+            }`}
+          >
+            Normales
+          </button>
+          <button
+            onClick={() => setActiveTab('duels')}
+            className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-colors ${
+              activeTab === 'duels'
+                ? 'bg-amber-50 text-amber-900 shadow-sm border border-amber-200'
+                : 'text-stone-500 hover:text-stone-700 hover:bg-stone-100'
+            }`}
+          >
+            Duelos
+          </button>
+        </div>
         
         <div className="flex-1 overflow-y-auto p-5 scrollbar-hide flex flex-col gap-3">
            {loading && <p className="text-center text-stone-500 font-medium">Cargando...</p>}
            
-           {!loading && records.length === 0 && (
+           {!loading && visibleRecords.length === 0 && (
              <div className="text-center py-8">
-               <p className="text-stone-500 font-medium">Aún no tienes partidas guardadas.</p>
-               <p className="text-sm text-stone-400 mt-1">¡Resuelve tu primer misterio para aparecer aquí!</p>
+               <p className="text-stone-500 font-medium whitespace-pre-line">
+                 {activeTab === 'normal' 
+                   ? 'Aún no tienes partidas normales guardadas.\n¡Resuelve tu primer misterio!'
+                   : 'Aún no tienes duelos guardados.\n¡Reta a un amigo!'}
+               </p>
              </div>
            )}
 
-           {!loading && records.map(record => (
+           {!loading && visibleRecords.map(record => (
              <RecordItem key={record.id} record={record} allRecords={records} onClose={onClose} onUpdateRecord={handleUpdateRecord} />
            ))}
         </div>
