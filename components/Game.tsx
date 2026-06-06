@@ -12,14 +12,25 @@ import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/fi
 type InteractionMode = 'place' | 'draft' | 'cross';
 
 function formatTime(ms: number) {
-  const totalSeconds = Math.floor(ms / 1000);
+  const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+export function getTimeLimit(difficulty: string) {
+  switch (difficulty) {
+    case 'Muy Fácil': return 90 * 1000;
+    case 'Fácil': return 180 * 1000;
+    case 'Medio': return 360 * 1000;
+    case 'Difícil': return 600 * 1000;
+    case 'Experto': return 720 * 1000;
+    default: return 180 * 1000;
+  }
+}
+
 export function Game() {
-  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime, difficulty, gameSeed, currentDuelId } = useGameStore();
+  const { puzzle, placements, drafts, crosses, history, currentView, goHome, placeCharacter, removeCharacter, toggleDraft, toggleCross, checkWin, undo, startTime, endTime, difficulty, gameSeed, currentDuelId, markDifficultyCompleted, isTimeAttack, timeUp, setTimeUp } = useGameStore();
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [mode, setMode] = useState<InteractionMode>('draft');
   const [now, setNow] = useState<number>(() => Date.now());
@@ -121,18 +132,28 @@ export function Game() {
   }, [currentView, currentDuelId, user]); // added user to dependency to refetch after login
 
   useEffect(() => {
-    if (currentView === 'playing') {
+    if (currentView === 'playing' && !endTime && !timeUp) {
       const interval = setInterval(() => {
-        setNow(Date.now());
+        const currentNow = Date.now();
+        setNow(currentNow);
+        
+        if (isTimeAttack && startTime) {
+          const limit = getTimeLimit(difficulty);
+          if (currentNow - startTime >= limit) {
+             setTimeUp(true);
+             useGameStore.setState({ endTime: currentNow });
+          }
+        }
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [currentView]);
+  }, [currentView, startTime, endTime, timeUp, isTimeAttack, difficulty, setTimeUp]);
 
   // Auto check win
   useEffect(() => {
     if (puzzle && placements.length === puzzle.N) {
       if (checkWin()) {
+        markDifficultyCompleted(difficulty);
         if (typeof window !== 'undefined') {
           confetti({
             particleCount: 150,
@@ -282,9 +303,16 @@ export function Game() {
             <h2 className="text-lg font-bold text-stone-900">{puzzle.ambientName}</h2>
             <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-400">
               <span className="capitalize">{puzzle.N}x{puzzle.N}</span>
+              {isTimeAttack && (
+                <span className="bg-blue-100/50 text-blue-600 px-1.5 rounded text-[10px] uppercase font-bold tracking-wider">Contrarreloj</span>
+              )}
               <span className="flex items-center gap-1">
                 <Timer size={12} />
-                {startTime ? formatTime((endTime || now) - startTime) : '0:00'}
+                {startTime ? formatTime(
+                  isTimeAttack 
+                    ? getTimeLimit(difficulty) - ((endTime || now) - startTime)
+                    : ((endTime || now) - startTime)
+                ) : '0:00'}
               </span>
             </div>
           </div>
@@ -624,7 +652,7 @@ export function Game() {
 
       </div>
 
-      {/* Win Modal Overlay */}
+      {/* Win/Lose Modal Overlay */}
       <AnimatePresence>
         {currentView === 'won' && (
           <motion.div 
@@ -637,20 +665,35 @@ export function Game() {
                animate={{ scale: 1, y: 0 }}
                className="bg-white rounded-3xl w-full max-w-sm p-8 flex flex-col items-center shadow-2xl relative overflow-hidden"
             >
-               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500" />
-               <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mb-6">
-                 <CheckCircle size={48} strokeWidth={2.5} />
-               </div>
-               <h2 className="text-3xl font-extrabold text-stone-900 mb-2">¡Misterio Resuelto!</h2>
-               <p className="text-stone-500 font-medium text-center mb-6">
-                 Has colocado a todos los personajes correctamente.
-               </p>
-               <div className="bg-stone-50 border border-stone-200 rounded-xl px-6 py-3 mb-4 w-full flex justify-between items-center">
-                 <span className="text-stone-500 font-semibold text-sm uppercase tracking-wider">Tiempo final</span>
-                 <span className="text-2xl font-black text-stone-800">{startTime && endTime ? formatTime(endTime - startTime) : '0:00'}</span>
-               </div>
+               {timeUp ? (
+                 <>
+                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-500 to-red-600" />
+                   <div className="w-20 h-20 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mb-6">
+                     <Timer size={48} strokeWidth={2.5} />
+                   </div>
+                   <h2 className="text-3xl font-extrabold text-stone-900 mb-2">¡Tiempo Agotado!</h2>
+                   <p className="text-stone-500 font-medium text-center mb-6">
+                     No has resuelto el misterio a tiempo.
+                   </p>
+                 </>
+               ) : (
+                 <>
+                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500" />
+                   <div className="w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mb-6">
+                     <CheckCircle size={48} strokeWidth={2.5} />
+                   </div>
+                   <h2 className="text-3xl font-extrabold text-stone-900 mb-2">¡Misterio Resuelto!</h2>
+                   <p className="text-stone-500 font-medium text-center mb-6">
+                     Has colocado a todos los personajes correctamente.
+                   </p>
+                   <div className="bg-stone-50 border border-stone-200 rounded-xl px-6 py-3 mb-4 w-full flex justify-between items-center">
+                     <span className="text-stone-500 font-semibold text-sm uppercase tracking-wider">Tiempo final</span>
+                     <span className="text-2xl font-black text-stone-800">{startTime && endTime ? formatTime(endTime - startTime) : '0:00'}</span>
+                   </div>
+                 </>
+               )}
 
-               {currentDuelId && (
+               {!timeUp && currentDuelId && (
                  <div className="w-full mb-4 bg-stone-50 border border-stone-200 rounded-xl p-4">
                     <h3 className="text-base font-bold text-stone-800 mb-2">Clasificación del Duelo</h3>
                     {loadingDuel ? (

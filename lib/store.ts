@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { generatePuzzle, setSeed, PuzzleState, Point, DifficultyLevel } from './generator';
 
 interface CharacterPlacement {
@@ -25,9 +26,16 @@ interface GameState {
   endTime: number | null;
   gameSeed: number | null;
   currentDuelId: string | null;
+  completedDifficulties: string[];
+  isTimeAttack: boolean;
+  timeUp: boolean;
   
-  startLevel: (difficulty: DifficultyLevel, customSeed?: number, duelId?: string) => void;
+  startLevel: (difficulty: DifficultyLevel, customSeed?: number, duelId?: string, isTimeAttack?: boolean) => void;
   goHome: () => void;
+  markDifficultyCompleted: (difficulty: string) => void;
+  switchMode: (mode: 'normal' | 'time') => void;
+  toggleAllDifficulties: () => void;
+  setTimeUp: (isUp: boolean) => void;
   
   placeCharacter: (charId: string, r: number, c: number) => void;
   removeCharacter: (charId: string) => void;
@@ -40,41 +48,61 @@ interface GameState {
   checkWin: () => boolean;
 }
 
-export const useGameStore = create<GameState>((set, get) => ({
-  currentView: 'menu',
-  difficulty: 'Muy Fácil',
-  puzzle: null,
-  placements: [],
-  drafts: {},
-  crosses: {},
-  history: [],
-  startTime: null,
-  endTime: null,
-  gameSeed: null,
-  currentDuelId: null,
+export const useGameStore = create<GameState>()(
+  persist(
+    (set, get) => ({
+      currentView: 'menu',
+      difficulty: 'Muy Fácil',
+      puzzle: null,
+      placements: [],
+      drafts: {},
+      crosses: {},
+      history: [],
+      startTime: null,
+      endTime: null,
+      gameSeed: null,
+      currentDuelId: null,
+      completedDifficulties: [],
+      isTimeAttack: false,
+      timeUp: false,
 
-  startLevel: (difficulty, customSeed, duelId) => {
-    // Generate a valid puzzle
-    let p = null;
-    let attempts = 0;
-    const seed = customSeed !== undefined ? customSeed : Math.floor(Math.random() * 2147483647);
-    setSeed(seed);
-    while (!p && attempts < 10) {
-      p = generatePuzzle(difficulty);
-      attempts++;
-    }
-    if (!p) {
-      console.error("Could not generate a unique puzzle, falling back to a simpler grid.");
-      // Just to prevent crashing, generate an easy one if hard fails totally.
-      p = generatePuzzle('Muy Fácil');
-      if (!p) return; // give up
-    }
-    set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null, gameSeed: seed, currentDuelId: duelId || null });
-  },
+      startLevel: (difficulty, customSeed, duelId, isTimeAttack = false) => {
+        // Generate a valid puzzle
+        let p = null;
+        let attempts = 0;
+        const seed = customSeed !== undefined ? customSeed : Math.floor(Math.random() * 2147483647);
+        setSeed(seed);
+        while (!p && attempts < 10) {
+          p = generatePuzzle(difficulty);
+          attempts++;
+        }
+        if (!p) {
+          console.error("Could not generate a unique puzzle, falling back to a simpler grid.");
+          // Just to prevent crashing, generate an easy one if hard fails totally.
+          p = generatePuzzle('Muy Fácil');
+          if (!p) return; // give up
+        }
+        set({ currentView: 'playing', difficulty, puzzle: p, placements: [], drafts: {}, crosses: {}, history: [], startTime: Date.now(), endTime: null, gameSeed: seed, currentDuelId: duelId || null, isTimeAttack, timeUp: false });
+      },
 
-  goHome: () => set({ currentView: 'menu', puzzle: null, placements: [], drafts: {}, crosses: {}, history: [], startTime: null, endTime: null, currentDuelId: null }),
+      goHome: () => set({ currentView: 'menu', puzzle: null, placements: [], drafts: {}, crosses: {}, history: [], startTime: null, endTime: null, currentDuelId: null, isTimeAttack: false, timeUp: false }),
 
-  placeCharacter: (charId, r, c) => {
+      markDifficultyCompleted: (difficulty: string) => set((state) => ({
+        completedDifficulties: state.completedDifficulties.includes(difficulty) 
+          ? state.completedDifficulties 
+          : [...state.completedDifficulties, difficulty]
+      })),
+
+      switchMode: (mode: 'normal' | 'time') => set({ isTimeAttack: mode === 'time' }),
+
+      toggleAllDifficulties: () => set((state) => ({ 
+        completedDifficulties: state.completedDifficulties.length === 5 ? [] : ['Muy Fácil', 'Fácil', 'Medio', 'Difícil', 'Experto'] 
+      })),
+
+      setTimeUp: (isUp: boolean) => set({ timeUp: isUp, currentView: isUp ? 'won' : get().currentView }),
+
+      placeCharacter: (charId, r, c) => {
+
     const state = get();
     if (!state.puzzle) return;
     
@@ -284,7 +312,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     
     return false;
   }
-}));
+}),
+{
+  name: 'game-storage',
+  partialize: (state) => ({ completedDifficulties: state.completedDifficulties }),
+}
+));
 
 // This function is kept for structural reference if complex logic is ever needed.
 function checkCluesMatch(placements: CharacterPlacement[], puzzle: PuzzleState): boolean {
